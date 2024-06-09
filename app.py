@@ -40,7 +40,7 @@ def get_conversational_chain():
 
     prompt_template = """
     Answer the question as detailed as possible from the provided context, make sure to provide all the details, if the answer is not in
-    provided context just say, "answer is not available in the context", don't provide the wrong answer\n\n
+    provided context just say, "Jawabannya tidak tersedia dalam konteks PDF yang diberikan", don't provide the wrong answer\n\n
     Context:\n {context}?\n
     Question: \n{question}\n
 
@@ -78,16 +78,16 @@ def user_input(user_question):
 
 def main():
     st.set_page_config("Chat with PDF")
-    st.header("ByteBrain - Chat with PDF, dibuat oleh Chairil & Samrah")
+    st.header("ByteBrain - Chat with PDF")
 
-    user_question = st.text_input("Ajukan Pertanyaan dari File PDF")
+    user_question = st.text_input("Ajukan Pertanyaan dari File PDF anda")
 
     if user_question:
         user_input(user_question)
 
     with st.sidebar:
         st.title("Menu:")
-        pdf_docs = st.file_uploader("Unggah File PDF Anda dan Klik Tombol Kirim & Proses", accept_multiple_files=True)
+        pdf_docs = st.file_uploader("Unggah File PDF anda (bisa beberapa file) lalu klik tombol kirim & proses", accept_multiple_files=True)
         if st.button("Kirim & Proses"):
             with st.spinner("Memuat..."):
                 raw_text = get_pdf_text(pdf_docs)
