@@ -189,7 +189,7 @@ def main():
                     with st.spinner("Mencari jawaban..."):
                         answer_question(user_question)
                 else:
-                    st.warning("Please upload and process a PDF document first.")
+                    st.warning("Tolong upload tekan tombol Ekstrak Teks dari PDF terlebih dahulu")
 
 if __name__ == "__main__":
     main()
