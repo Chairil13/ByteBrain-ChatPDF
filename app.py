@@ -156,40 +156,60 @@ def generate_quiz(context_language, quiz_language, num_questions):
     st.code(formatted_quiz)
     
 def main():
-    
     st.set_page_config(page_title="ByteBrain - Chat with PDF", page_icon="🤖")
     st.header("ByteBrain - Chat with PDF 📂")
     st.markdown("Fitur utama dari sistem ini adalah user dapat memperoleh informasi berdasarkan file PDF yang di upload dan dapat membuat daftar pertanyaan atau kuis beserta jawabannya. Silahkan upload file PDF Anda, form upload terletak pada pojok kiri atas Browser ↖️", unsafe_allow_html=True)
 
     quiz_language = st.selectbox("Pilih Bahasa Kuis:", ["Indonesian", "English"])
-    num_questions = st.number_input("Masukkan jumlah soal yang diinginkan", min_value=1, max_value=100, value=10)
+    num_questions = st.number_input("Masukkan jumlah soal yang diinginkan:", min_value=1, max_value=100, value=10)
+
+    # Cek status upload dan ekstraksi teks
+    pdf_uploaded = bool(st.session_state.get("pdf_uploaded", False))
+    text_extracted = bool(st.session_state.get("text_extracted", False))
 
     if st.button("Generate Quiz"):
-        if os.path.exists("faiss_index"):
+        if not pdf_uploaded:
+            st.warning("Tolong upload PDF terlebih dahulu")
+        elif not text_extracted:
+            st.warning("Tolong ekstrak teks dari PDF terlebih dahulu")
+        else:
             with st.spinner("Generating quiz..."):
                 generate_quiz("Indonesian", quiz_language, num_questions)
-        else:
-            st.warning("Tolong upload tekan tombol Ekstrak Teks dari PDF terlebih dahulu")
 
     with st.sidebar:
         st.title("Menu:")
-        pdf_docs = st.file_uploader("Upload file PDF anda (bisa beberapa file) lalu klik tombol Ekstrak Teks dari PDF, setelah itu Anda bisa tanyakan pertanyaan atau generate quiz.", accept_multiple_files=True)
-        if st.button("Ekstrak Teks dari PDF"):
-            with st.spinner("Memuat..."):
-                raw_text = get_pdf_text(pdf_docs)
-                text_chunks = get_text_chunks(raw_text)
-                get_vector_store(text_chunks)
-                st.success("Selesai")
+        pdf_docs = st.file_uploader("Upload file PDF anda lalu klik tombol Ekstrak Teks dari PDF, setelah itu Anda bisa tanyakan pertanyaan atau generate quiz.", accept_multiple_files=True)
+        
+        if pdf_docs:
+            st.session_state["pdf_uploaded"] = True
+        else:
+            st.session_state["pdf_uploaded"] = False
 
+        if st.button("Ekstrak Teks dari PDF"):
+            if not pdf_docs:
+                st.warning("Tolong upload PDF terlebih dahulu")
+            else:
+                with st.spinner("Memuat..."):
+                    raw_text = get_pdf_text(pdf_docs)
+                    text_chunks = get_text_chunks(raw_text)
+                    get_vector_store(text_chunks)
+                    st.session_state["text_extracted"] = True
+                    st.success("Selesai")
+        
         st.header("Ajukan Pertanyaan:")
         user_question = st.text_input("Masukkan pertanyaan Anda di sini:")
         if st.button("Kirim"):
-            if user_question:
-                if os.path.exists("faiss_index"):
-                    with st.spinner("Mencari jawaban..."):
-                        answer_question(user_question)
-                else:
-                    st.warning("Tolong upload tekan tombol Ekstrak Teks dari PDF terlebih dahulu")
+            if not pdf_uploaded:
+                st.warning("Tolong upload PDF terlebih dahulu")
+            elif not text_extracted:
+                st.warning("Tolong ekstrak teks dari PDF terlebih dahulu")
+            else:
+                if user_question:
+                    if os.path.exists("faiss_index"):
+                        with st.spinner("Mencari jawaban..."):
+                            answer_question(user_question)
+                    else:
+                        st.warning("Tolong ekstrak teks dari PDF terlebih dahulu")
 
 if __name__ == "__main__":
     main()
