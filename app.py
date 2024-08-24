@@ -42,7 +42,7 @@ def get_conversational_chain():
     Answer:
     """
 
-    model = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0.3)
+    model = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.3)
     prompt = PromptTemplate(template=prompt_template, input_variables=["context", "question"])
     chain = load_qa_chain(model, chain_type="stuff", prompt=prompt)
     return chain
@@ -107,7 +107,14 @@ def format_quiz(raw_quiz):
 
     return "\n".join(formatted_quiz)
 
-def generate_quiz(context_language, quiz_language, num_questions):
+def generate_quiz(context_language, quiz_language, num_questions, difficulty_level):
+    # Template pertanyaan yang sesuai dengan tingkat kesulitan
+    difficulty_prompt = {
+        "Mudah": "Create simple and straightforward questions.",
+        "Sedang": "Create moderately complex questions.",
+        "Sulit": "Create challenging and difficult questions."
+    }
+
     question_format = """
     {i}. [Write a specific, relevant question here based on the context]
     A. [Option A]
@@ -124,7 +131,8 @@ def generate_quiz(context_language, quiz_language, num_questions):
     2. Provide 4 answer options (A, B, C, D) for each question.
     3. Indicate the correct answer after the options.
     4. Do not use placeholders like "[Write a specific, relevant question here based on the context]". Instead, write actual, context-specific questions.
-    5. The output format should be exactly as shown below, with each question on a new line and options labeled A, B, C, D:
+    5. {difficulty_prompt[difficulty_level]}
+    6. The output format should be exactly as shown below, with each question on a new line and options labeled A, B, C, D:
 
     Context:\n {{context}}\n
 
@@ -132,7 +140,7 @@ def generate_quiz(context_language, quiz_language, num_questions):
     {questions_prompt}
     """
     
-    model = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0.7)
+    model = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.7)
     prompt = PromptTemplate(template=prompt_template, input_variables=["context"])
     chain = load_qa_chain(model, chain_type="stuff", prompt=prompt)
     
@@ -154,6 +162,7 @@ def generate_quiz(context_language, quiz_language, num_questions):
     # Display the generated quiz
     st.write("Generated Quiz:")
     st.code(formatted_quiz)
+
     
 def main():
     st.set_page_config(page_title="ByteBrain - Chat with PDF", page_icon="🤖")
@@ -162,6 +171,7 @@ def main():
 
     quiz_language = st.selectbox("Pilih Bahasa Kuis:", ["Indonesian", "English"])
     num_questions = st.number_input("Masukkan jumlah soal yang diinginkan:", min_value=1, max_value=100, value=10)
+    difficulty_level = st.selectbox("Pilih Tingkat Kesulitan:", ["Mudah", "Sedang", "Sulit"])
 
     # Cek status upload dan ekstraksi teks
     pdf_uploaded = bool(st.session_state.get("pdf_uploaded", False))
@@ -174,20 +184,27 @@ def main():
             st.warning("Tolong ekstrak teks dari PDF terlebih dahulu")
         else:
             with st.spinner("Generating quiz..."):
-                generate_quiz("Indonesian", quiz_language, num_questions)
+                generate_quiz("Indonesian", quiz_language, num_questions, difficulty_level)
 
     with st.sidebar:
         st.title("Menu:")
         pdf_docs = st.file_uploader("Upload file PDF anda lalu klik tombol Ekstrak Teks dari PDF, setelah itu Anda bisa tanyakan pertanyaan atau generate quiz.", accept_multiple_files=True)
-        
+
         if pdf_docs:
-            st.session_state["pdf_uploaded"] = True
+            is_pdf = all([pdf.type == "application/pdf" for pdf in pdf_docs])
+            if is_pdf:
+                st.session_state["pdf_uploaded"] = True
+            else:
+                st.warning("File dokumen tidak didukung, silakan upload file PDF.")
+                st.session_state["pdf_uploaded"] = False
         else:
             st.session_state["pdf_uploaded"] = False
 
-        if st.button("Ekstrak Teks dari PDF"):
+        if st.button("Ekstrak Teks"):
             if not pdf_docs:
                 st.warning("Tolong upload PDF terlebih dahulu")
+            elif not st.session_state.get("pdf_uploaded", False):
+                st.warning("File dokumen tidak didukung, silakan upload file PDF.")
             else:
                 with st.spinner("Memuat..."):
                     raw_text = get_pdf_text(pdf_docs)
