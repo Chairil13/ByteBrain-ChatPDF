@@ -1,19 +1,21 @@
-import streamlit as st
-from PyPDF2 import PdfReader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-import os
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
-import google.generativeai as genai
-from langchain.vectorstores import FAISS
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.chains.question_answering import load_qa_chain
-from langchain.prompts import PromptTemplate
-from dotenv import load_dotenv
-import re
-import difflib
+import streamlit as st  # Library untuk membuat antarmuka web interaktif
+from PyPDF2 import PdfReader  # Membaca dan mengekstrak teks dari file PDF
+from langchain.text_splitter import RecursiveCharacterTextSplitter  # Membagi teks panjang menjadi potongan lebih kecil
+import os  # Berinteraksi dengan sistem operasi, misalnya untuk akses variabel lingkungan
+from langchain_google_genai import GoogleGenerativeAIEmbeddings  # Membuat embedding teks menggunakan model Google Generative AI
+import google.generativeai as genai  # Library untuk interaksi dengan Google Generative AI
+from langchain.vectorstores import FAISS  # Mengelola dan mencari embedding teks dengan cepat
+from langchain_google_genai import ChatGoogleGenerativeAI  # Mengelola percakapan dengan model Google Generative AI
+from langchain.chains.question_answering import load_qa_chain  # Memuat rantai untuk tugas tanya jawab berbasis teks
+from langchain.prompts import PromptTemplate  # Membuat template prompt untuk model AI
+from dotenv import load_dotenv  # Memuat variabel lingkungan dari file .env
+import re  # Ekspresi reguler untuk pencocokan dan manipulasi teks
+import difflib  # Membandingkan teks dan menemukan kecocokan yang mirip
 
+# Mengatur judul dan ikon
 st.set_page_config(page_title="ByteBrain - Chat with PDF", page_icon="🤖")
 
+# Style CSS
 st.markdown(
     """
     <style>
@@ -27,15 +29,20 @@ st.markdown(
         padding: 2px;
         border-radius: 3px;
     }
+    p {
+        color: black;
+    }
     </style>
     """,
     unsafe_allow_html=True
 )
 
+# Memuat token API Gemini
 load_dotenv()
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 print(os.getenv("GOOGLE_API_KEY"))
 
+# Fungsi untuk mengambil teks dari file PDF yang diunggah.
 def get_pdf_text(pdf_docs):
     text_with_page = []
     for pdf in pdf_docs:
@@ -45,6 +52,7 @@ def get_pdf_text(pdf_docs):
             text_with_page.append((text, page_num))
     return text_with_page
 
+# Fungsi untuk membagi teks menjadi potongan-potongan kecil agar lebih mudah diolah.
 def get_text_chunks(text_with_page):
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=10000, chunk_overlap=1000)
     chunks = []
@@ -53,6 +61,7 @@ def get_text_chunks(text_with_page):
         chunks.extend([(chunk, page_num) for chunk in split_texts])
     return chunks
 
+# Fungsi untuk membuat dan menyimpan vector store dan direpsentasi ke embeddings.
 def get_vector_store(text_chunks):
     embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
     texts = [chunk[0] for chunk in text_chunks]
@@ -60,6 +69,7 @@ def get_vector_store(text_chunks):
     vector_store = FAISS.from_texts(texts, embedding=embeddings, metadatas=metadatas)
     vector_store.save_local("faiss_index")
 
+# Fungsi untuk membuat trained data model atau template
 def get_conversational_chain():
     prompt_template = """
     Answer the question as detailed as possible from the provided context, make sure to provide all the details, if the answer is not in
@@ -70,11 +80,12 @@ def get_conversational_chain():
     Answer:
     """
 
-    model = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.3)
+    model = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.3) # temperature rendah biar akurat
     prompt = PromptTemplate(template=prompt_template, input_variables=["context", "question"])
     chain = load_qa_chain(model, chain_type="stuff", prompt=prompt)
     return chain
 
+# Fungsi untuk menemukan dan menyoroti teks dalam PDF yang cocok dengan jawaban AI.
 def find_and_highlight_text(ai_answer, doc_text, page_num):
     ai_sentences = ai_answer.split('.')
     doc_sentences = doc_text.split('.')
@@ -89,8 +100,9 @@ def find_and_highlight_text(ai_answer, doc_text, page_num):
 
     return highlighted_text
 
+# Fungsi untuk menjawab pertanyaan user berdasarkan konten PDF.
 def answer_question(user_question):
-    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
+    embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
     
     new_db = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
     docs = new_db.similarity_search(user_question)
@@ -117,9 +129,10 @@ def answer_question(user_question):
     if not highlighted_texts:
         st.markdown("Tidak ditemukan kecocokan jawaban dari PDF.")
 
+# Fungsi untuk memformat kuis menjadi format yang sesuai
 def format_quiz(raw_quiz):
     formatted_quiz = []
-    questions = re.split(r'\d+\.', raw_quiz)[1:]  # Split by question numbers
+    questions = re.split(r'\d+\.', raw_quiz)[1:]
 
     for i, question in enumerate(questions, 1):
         lines = question.strip().split('\n')
@@ -147,6 +160,7 @@ def format_quiz(raw_quiz):
 
     return "\n".join(formatted_quiz)
 
+# Fungsi untuk menghasilkan kuis berdasarkan konteks yang diekstraksi dari PDF
 def generate_quiz(context_language, quiz_language, num_questions, difficulty_level):
     difficulty_prompt = {
         "Mudah": "Create simple and straightforward questions.",
@@ -198,9 +212,10 @@ def generate_quiz(context_language, quiz_language, num_questions, difficulty_lev
     st.write("Generated Quiz:")
     st.code(formatted_quiz)
 
+# Fungsi utama yang mengatur alur program, mulai dari pengunggahan PDF, ekstraksi teks, hingga pembuatan kuis
 def main():  
     st.header("ByteBrain - Chat with PDF 📂")
-    st.markdown("Fitur utama dari sistem ini adalah user dapat memperoleh informasi berdasarkan file PDF yang di upload dan dapat membuat daftar pertanyaan atau kuis beserta jawabannya. Silahkan upload file PDF Anda, form upload terletak pada pojok kiri atas Browser ↖️", unsafe_allow_html=True)
+    st.markdown("Fitur utama dari sistem ini yaitu user dapat memperoleh informasi berdasarkan file PDF yang di upload dan dapat membuat daftar pertanyaan atau kuis beserta jawabannya. Silahkan upload file PDF Anda, form upload terletak pada pojok kiri atas Browser ↖️", unsafe_allow_html=True)
 
     quiz_language = st.selectbox("Pilih Bahasa Kuis:", ["Indonesian", "English"])
     num_questions = st.number_input("Masukkan jumlah soal yang diinginkan:", min_value=1, max_value=100, value=10)
@@ -260,5 +275,6 @@ def main():
                     else:
                         st.warning("Tolong ekstrak teks dari PDF terlebih dahulu")
 
+# Memastikan fungsi main() dijalankan ketika script di eksekusi
 if __name__ == "__main__":
     main()
