@@ -10,26 +10,54 @@ from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
 from dotenv import load_dotenv
 import re
+import difflib
+
+st.set_page_config(page_title="ByteBrain - Chat with PDF", page_icon="🤖")
+
+st.markdown(
+    """
+    <style>
+    .stApp {
+        background-color: #f7dcbe;
+    }
+    section[data-testid="stSidebar"] {
+        background-color: #abdbe3;
+    }
+    span[style*="background-color: yellow"] {
+        padding: 2px;
+        border-radius: 3px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
 load_dotenv()
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+print(os.getenv("GOOGLE_API_KEY"))
 
 def get_pdf_text(pdf_docs):
-    text = ""
+    text_with_page = []
     for pdf in pdf_docs:
         pdf_reader = PdfReader(pdf)
-        for page in pdf_reader.pages:
-            text += page.extract_text()
-    return text
+        for page_num, page in enumerate(pdf_reader.pages, 1):
+            text = page.extract_text()
+            text_with_page.append((text, page_num))
+    return text_with_page
 
-def get_text_chunks(text):
+def get_text_chunks(text_with_page):
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=10000, chunk_overlap=1000)
-    chunks = text_splitter.split_text(text)
+    chunks = []
+    for text, page_num in text_with_page:
+        split_texts = text_splitter.split_text(text)
+        chunks.extend([(chunk, page_num) for chunk in split_texts])
     return chunks
 
 def get_vector_store(text_chunks):
     embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
-    vector_store = FAISS.from_texts(text_chunks, embedding=embeddings)
+    texts = [chunk[0] for chunk in text_chunks]
+    metadatas = [{"page": chunk[1]} for chunk in text_chunks]
+    vector_store = FAISS.from_texts(texts, embedding=embeddings, metadatas=metadatas)
     vector_store.save_local("faiss_index")
 
 def get_conversational_chain():
@@ -47,19 +75,19 @@ def get_conversational_chain():
     chain = load_qa_chain(model, chain_type="stuff", prompt=prompt)
     return chain
 
-def process_response(response_text):
-    questions = response_text.strip().split('\n\n')
-    formatted_questions = []
-    
-    for question in questions:
-        lines = question.strip().split('\n')
-        formatted_question = []
-        for line in lines:
-            if line.strip():
-                formatted_question.append(line.strip())
-        formatted_questions.append('\n'.join(formatted_question))
-    
-    return '\n\n'.join(formatted_questions)
+def find_and_highlight_text(ai_answer, doc_text, page_num):
+    ai_sentences = ai_answer.split('.')
+    doc_sentences = doc_text.split('.')
+
+    highlighted_text = []
+    for ai_sentence in ai_sentences:
+        ai_sentence = ai_sentence.strip()
+        if ai_sentence:
+            matches = difflib.get_close_matches(ai_sentence, doc_sentences, n=1, cutoff=0.7)
+            if matches:
+                highlighted_text.append(f"Page {page_num}: <span style='background-color: yellow;'>{matches[0]}</span>")
+
+    return highlighted_text
 
 def answer_question(user_question):
     embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
@@ -74,7 +102,20 @@ def answer_question(user_question):
         return_only_outputs=True
     )
 
-    st.markdown(f"**Reply:**\n\n{response['output_text']}")
+    ai_answer = response['output_text']
+    st.markdown(f"**Reply:**\n\n{ai_answer}")
+
+    st.markdown("**Jawaban yang relevan dari PDF:**")
+    highlighted_texts = []
+    for doc in docs:
+        highlighted = find_and_highlight_text(ai_answer, doc.page_content, doc.metadata['page'])
+        highlighted_texts.extend(highlighted)
+
+    for text in highlighted_texts[:3]:
+        st.markdown(text, unsafe_allow_html=True)
+
+    if not highlighted_texts:
+        st.markdown("Tidak ditemukan kecocokan jawaban dari PDF.")
 
 def format_quiz(raw_quiz):
     formatted_quiz = []
@@ -84,7 +125,6 @@ def format_quiz(raw_quiz):
         lines = question.strip().split('\n')
         question_text = lines[0].strip()
         
-        # Check if the question is a placeholder and skip it if so
         if question_text.startswith('[Generated Question'):
             continue
         
@@ -108,7 +148,6 @@ def format_quiz(raw_quiz):
     return "\n".join(formatted_quiz)
 
 def generate_quiz(context_language, quiz_language, num_questions, difficulty_level):
-    # Template pertanyaan yang sesuai dengan tingkat kesulitan
     difficulty_prompt = {
         "Mudah": "Create simple and straightforward questions.",
         "Sedang": "Create moderately complex questions.",
@@ -144,28 +183,22 @@ def generate_quiz(context_language, quiz_language, num_questions, difficulty_lev
     prompt = PromptTemplate(template=prompt_template, input_variables=["context"])
     chain = load_qa_chain(model, chain_type="stuff", prompt=prompt)
     
-    # Get context from the uploaded PDF
     embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
     new_db = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
     docs = new_db.similarity_search("", k=5)  # Get top 5 most relevant chunks
     context = " ".join([doc.page_content for doc in docs])
     
-    # Generate quiz
     response = chain(
         {"input_documents": docs, "question": prompt.format(context=context)},
         return_only_outputs=True
     )
     
-    # Format the generated quiz
     formatted_quiz = format_quiz(response["output_text"])
     
-    # Display the generated quiz
     st.write("Generated Quiz:")
     st.code(formatted_quiz)
 
-    
-def main():
-    st.set_page_config(page_title="ByteBrain - Chat with PDF", page_icon="🤖")
+def main():  
     st.header("ByteBrain - Chat with PDF 📂")
     st.markdown("Fitur utama dari sistem ini adalah user dapat memperoleh informasi berdasarkan file PDF yang di upload dan dapat membuat daftar pertanyaan atau kuis beserta jawabannya. Silahkan upload file PDF Anda, form upload terletak pada pojok kiri atas Browser ↖️", unsafe_allow_html=True)
 
@@ -173,7 +206,6 @@ def main():
     num_questions = st.number_input("Masukkan jumlah soal yang diinginkan:", min_value=1, max_value=100, value=10)
     difficulty_level = st.selectbox("Pilih Tingkat Kesulitan:", ["Mudah", "Sedang", "Sulit"])
 
-    # Cek status upload dan ekstraksi teks
     pdf_uploaded = bool(st.session_state.get("pdf_uploaded", False))
     text_extracted = bool(st.session_state.get("text_extracted", False))
 
@@ -207,8 +239,8 @@ def main():
                 st.warning("File dokumen tidak didukung, silakan upload file PDF.")
             else:
                 with st.spinner("Memuat..."):
-                    raw_text = get_pdf_text(pdf_docs)
-                    text_chunks = get_text_chunks(raw_text)
+                    text_with_page = get_pdf_text(pdf_docs)
+                    text_chunks = get_text_chunks(text_with_page)
                     get_vector_store(text_chunks)
                     st.session_state["text_extracted"] = True
                     st.success("Selesai")
