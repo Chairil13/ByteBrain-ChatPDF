@@ -227,7 +227,7 @@ def generate_quiz(context_language, quiz_language, num_questions, difficulty_lev
     st.download_button(
         label="Download Quiz (Word)",
         data=buffer,
-        file_name="Generated_Quiz_by_ByteBrain.docx",
+        file_name="Quiz_by_ByteBrain.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
 
