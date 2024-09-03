@@ -1,18 +1,18 @@
 import streamlit as st
 from PyPDF2 import PdfReader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-import os
+from langchain.text_splitter import RecursiveCharacterTextSplitter # untuk chuncking/pemotongan teks
+import os # untuk interaksi dengan OS, akses atau kelola file
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 import google.generativeai as genai
-from langchain.vectorstores import FAISS
+from langchain.vectorstores import FAISS # unruk simpan vector embeddings
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
 from dotenv import load_dotenv
-import re
-import difflib
-from docx import Document
-from io import BytesIO
+import re # manipulasi string pada generate quiz
+import difflib # untuk highlight text atau kesamaan jawaban dengan teks PDF
+from docx import Document # membuat dan manipulasi docx
+from io import BytesIO # untuk menyimpan file doc di memori secara sementara biar bisa didownload
 
 # Mengatur judul dan ikon
 st.set_page_config(page_title="ByteBrain - Chat with PDF", page_icon="🤖")
